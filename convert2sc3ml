@@ -1,0 +1,37 @@
+#!/bin/bash
+
+#set dat=`date --rfc-3339=date`
+dat=200505
+
+#Convert FDSN-XML to SC-XML
+fdsnxml2inv -vvvv -f --log-stages TH.xml > TH_sc3_$dat.xml 
+#fdsnxml2inv -vvvv -f --log-stages TH_private.xml > TH_sc3_private_$dat.xml 
+
+
+#Convert SOH-Channel to auxStream (stream (channel) without defined frequency response)
+for ii in AE1 AE2 AE3
+do
+cat TH_sc3_$dat.xml | sed -e "/.*\.${ii}\..*/,+2d" | sed -e "/code=\"${ii}\"/{n;n;N;N;N;d}" | sed "s/<depth>-9999<\/depth>/<restricted>true<\/restricted>/g" | sed "s/.*code=\"${ii}\".*/          <auxStream code=\"${ii}\">/g" | sed -e "/code=\"${ii}\"/{n;n;n;s/stream/auxStream/}" > dum
+\mv dum TH_sc3_$dat.xml 
+done
+
+
+#Subsequent editing for the BGR
+sed -i -e 's:</network>:<archive>BGR</archive></network>:g' TH_sc3_$dat.xml 
+sed -i -e 's:</station>:<archive>BGR</archive></station>:g' TH_sc3_$dat.xml 
+sed -i -e 's:</stream>:  <restricted>false</restricted>\n            <shared>true</shared>\n          </stream>:g' TH_sc3_$dat.xml 
+sed -i -e 's:<station :<station archiveNetworkCode="TH" :g' TH_sc3_$dat.xml 
+
+
+
+#sed -i -e 's:</network>:<archive>BGR</archive></network>:g' $DATA/SC3_TH_private.sc3ml
+#sed -i -e 's:</station>:<archive>BGR</archive></station>:g' $DATA/SC3_TH_private.sc3ml
+
+
+
+
+exit
+
+#Back transformation
+$SC3BIN/fdsnxml2inv --to-staxml -vvvv -f --log-stages $DATA/SC3_TH.sc3ml > $DATA/SC3_TH.xml
+$SC3BIN/fdsnxml2inv --to-staxml -vvvv -f --log-stages $DATA/SC3_TH_private.sc3ml > $DATA/SC3_TH_private.xml

@@ -1,0 +1,59 @@
+#!/bin/tcsh
+
+#New sens and coords
+set stati=metadata/SH_TH_private_statinf.dat
+set sens=metadata/SH_TH_private_sensitivities.txt
+
+##Create STATINF
+#Copy orig file
+\cp VGL_SH/STATINF.DAT dum_statinf
+
+#Loop over new files
+set n=`cat $stati | wc -l`
+foreach i ( `seq 1 1 $n` )
+#Get station lines
+set statinf=`cat $stati | awk '{if(NR=="'$i'")print $0}' | sed 's/name:/name: /g'| sed 's/ /}/g'`
+set sta=`cat $stati | awk '{if(NR=="'$i'")print $1}'`
+
+#Replace or add information
+set op=`cat VGL_SH/STATINF.DAT | awk '{if($1=="'$sta'"){print 1}else{print 0}}' | awk 'BEGIN{sum=0}{sum=sum+$1}END{print sum}'`
+if ($op == 1) then
+sed -i 's/.*'$sta'.*/'$statinf'/g' dum_statinf
+else
+echo $statinf >> dum_statinf
+endif
+end
+echo " " >> dum_statinf
+
+#print out STATINF
+set dat=`date --rfc-3339=date`
+cat dum_statinf | sed 's/}/ /g' >! STATINF_$dat.DAT
+
+\rm dum_statinf
+
+
+##Create SENSITIVITIES
+#Copy orig file
+\cp VGL_SH/sensitivities.txt dum_sens
+
+
+#Loop over stations
+cat $sens | sed 's/-/ /g' | awk '{if($1!=old)print $1;old=$1}' >! dum
+set n=`cat dum | wc -l`
+
+foreach i ( `seq 1 1 $n` )
+#Get stations and delete rows
+set sta=`cat dum | awk '{if(NR=="'$i'")print $1}'`
+sed -i '/'$sta'/d' dum_sens
+end
+
+
+#Add new stations and remove empty lines
+cat $sens | sed 's/ 1-/01-/g' | sed 's/ 2-/02-/g' | sed 's/ 3-/03-/g' | sed 's/ 4-/04-/g' | sed 's/ 5-/05-/g' | sed 's/ 6-/06-/g' | sed 's/ 7-/07-/g' | sed 's/ 8-/08-/g' | sed 's/ 9-/09-/g' | awk '{printf"%-10s %18s  %-17s   %-6.4f\n",$1,$2,$3,$4}'  >> dum_sens
+
+cat dum_sens | sed -e '/^\s*$/d' >! sensitivities_$dat.txt
+\rm dum_sens dum
+
+
+
+

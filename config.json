@@ -1,0 +1,17 @@
+###Config file
+{
+#Output path
+"OUT": "/home/CREATEXML/metadata/",
+#Temporary data path
+"RESP": "/home/CREATEXML/metadata/resp/",
+#Network abbreviation
+"NET_CODE": "TH",
+#Network name
+"NET_DESC": "Thuringia Seismic Network, Uni Jena",
+#Start of the network
+"NET_START": "1980-01-01",
+#Operator
+"SOURCE": "Uni Jena",
+#Station name prefix/suffix, if no pre/suffix is desired only "{}"
+"STA_NAME": "UJENA Station {}, Germany"
+}

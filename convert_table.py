@@ -239,11 +239,11 @@ def meta2xml(only_public=False):
 
 with open('config.json') as f:
     conf = json.load(f, cls=ConfigJSONDecoder)
-globals().update(conf)   
+globals().update(conf)
 
 STORAGE = 'Steim2'
 
-TNAME = 'Stations_-_{}.csv'
+TNAME = 'metadata/Stations_{}.csv'
 DEFAULT_LOC_CHA_CODE = '.?H'
 DEFAULT_SRS = '100'
 SR2CODE = {200: 'H', 100: 'H', 20: 'B', 1: 'L'}

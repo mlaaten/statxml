@@ -12,13 +12,13 @@ import os.path
 
 
 def csv2list(name):
-    fname  = TNAME.format(name)
+    fname  = CONF['TNAME'].format(name)
     with open(fname) as f:
         reader = csv.reader(f)
         return list(reader)[1:]
 
 def csv2dictlist(name):
-    fname  = TNAME.format(name)
+    fname  = CONF['TNAME'].format(name)
     d = defaultdict(list)
     with open(fname) as f:
         reader = csv.DictReader(f)
@@ -215,12 +215,14 @@ def meta2xml(only_public=False):
         stations.append(Station(code=sta_code, latitude=lat, longitude=lon,
                       elevation=elev, creation_date=sta_startdate,
                       restricted_status='open',
-                      site=Site(name=STA_NAME.format(name), country='Germany'),
+                      site=Site(name=CONF['STA_NAME'].format(name),
+                                country='Germany'),
                       channels=channels,
                       start_date=sta_startdate, end_date=enddate))
-    net = Network(code=NET_CODE, stations=stations, description=NET_DESC,
-                  start_date=UTC(NET_START), restricted_status='open')
-    inv = Inventory(networks=[net], source=SOURCE)
+    net = Network(code=NET_CODE, stations=stations,
+                  description=CONF['NET_DESC'],
+                  start_date=UTC(CONF['NET_START']), restricted_status='open')
+    inv = Inventory(networks=[net], source=CONF['SOURCE'])
     fname = NET_CODE + '_private' * (not only_public)
     inv.write(OUT + fname + '.xml', 'STATIONXML', validate=True)
     with open(OUT + 'SH_' + fname + '_statinf.dat', 'w') as f:
@@ -238,12 +240,13 @@ def meta2xml(only_public=False):
 
 
 with open('config.json') as f:
-    conf = json.load(f, cls=ConfigJSONDecoder)
-globals().update(conf)
+    CONF = json.load(f, cls=ConfigJSONDecoder)
+OUT = CONF['OUT']
+RESP = CONF['RESP']
+NET_CODE = CONF['NET_CODE']
 
 STORAGE = 'Steim2'
 
-TNAME = 'metadata/Stations_{}.csv'
 DEFAULT_LOC_CHA_CODE = '.?H'
 DEFAULT_SRS = '100'
 SR2CODE = {200: 'H', 100: 'H', 20: 'B', 1: 'L'}

@@ -4,6 +4,8 @@
 "OUT": "metadata/",
 #Temporary data path
 "RESP": "metadata/resp/",
+#Table name
+"TNAME": "metadata/Stations_{}.csv",
 #Network abbreviation
 "NET_CODE": "TH",
 #Network name

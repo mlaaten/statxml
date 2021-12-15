@@ -259,5 +259,5 @@ INFO = '{:5} {:25} {:.3f}  {:.3f}  {:.1f}  {:.2e}  {:.2f}  norm:{:.2e} zeros:{} 
 
 
 write_gain_expressions_for_table()
-meta2xml(only_public=False)
 meta2xml(only_public=True)
+meta2xml(only_public=False)

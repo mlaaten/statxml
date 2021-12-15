@@ -1,9 +1,9 @@
 ###Config file
 {
 #Output path
-"OUT": "/home/CREATEXML/metadata/",
+"OUT": "metadata/",
 #Temporary data path
-"RESP": "/home/CREATEXML/metadata/resp/",
+"RESP": "metadata/resp/",
 #Network abbreviation
 "NET_CODE": "TH",
 #Network name

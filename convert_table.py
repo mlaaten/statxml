@@ -5,7 +5,7 @@ from copy import copy, deepcopy
 from obspy import UTCDateTime as UTC, read_inventory
 from obspy.clients.nrl import NRL
 from obspy.core.inventory import Inventory, Network, Station, Channel, Site, Equipment
-from obspy.core.inventory.response import FIRResponseStage, ResponseStage, CoefficientsTypeResponseStage
+from obspy.core.inventory.response import CoefficientsTypeResponseStage
 from obspy.io.sh.core import from_utcdatetime
 #from obspy.core.util import AttribDict
 import os.path

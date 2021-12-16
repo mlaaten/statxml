@@ -5,6 +5,7 @@ from copy import copy, deepcopy
 from obspy import UTCDateTime as UTC, read_inventory
 from obspy.clients.nrl import NRL
 from obspy.core.inventory import Inventory, Network, Station, Channel, Site, Equipment
+from obspy.core.inventory.response import FIRResponseStage, ResponseStage, CoefficientsTypeResponseStage
 from obspy.io.sh.core import from_utcdatetime
 #from obspy.core.util import AttribDict
 import os.path
@@ -17,15 +18,25 @@ def csv2list(name):
         reader = csv.reader(f)
         return list(reader)[1:]
 
-def csv2dictlist(name):
+def csv2dictlist(name, colkey='station code'):
     fname  = CONF['TNAME'].format(name)
     d = defaultdict(list)
     with open(fname) as f:
         reader = csv.DictReader(f)
         for line in reader:
-            if line['station code'] != '':
-                key = line['station code']
+            if line[colkey] != '':
+                key = line[colkey]
                 d[key].append(line)
+    return d
+
+def csv2dict(name, colkey='name'):
+    fname  = CONF['TNAME'].format(name)
+    d = {}
+    with open(fname) as f:
+        reader = csv.DictReader(f)
+        for line in reader:
+            if colkey in line:
+                d[line[colkey]] = line
     return d
 
 def _strip_keys(keys):
@@ -42,6 +53,9 @@ def load_seism_NRL():
 def load_digi_NRL():
     lines = csv2list('digitizer_NRL')
     return {line[0]: _strip_keys(line[1]) for line in lines}
+
+def load_filters():
+    return csv2dict('filters')
 
 def _date2sh(utc):
     return '...' if utc is None else from_utcdatetime(utc).lower()[:17]
@@ -85,6 +99,7 @@ def meta2xml(only_public=False):
     info = []
     # tsn is dictionary {station_code: epoch_list}
     tsn = csv2dictlist(NET_CODE)
+    filters = load_filters()
     # sort epochs by time, coordinates of latest epoch will be used as station
     # coordinates
     for sta in tsn:
@@ -108,9 +123,7 @@ def meta2xml(only_public=False):
             loc_cha_code = setdefault(epoch, 'location and channel (non default)', DEFAULT_LOC_CHA_CODE)
             loc_code, cha_code_template = loc_cha_code.split('.')
             srs = setdefault(epoch, 'sampling rates', DEFAULT_SRS)
-            srs = [int(sr.strip()) for sr in srs.split(',')]
-
-
+            srs = srs.replace(' ', '').split(',')
             startdate = UTC(epoch['UTC_starttime'])
             enddate = UTC(epoch['UTC_endtime']) if epoch['UTC_endtime'] != '' else None
             if sta_startdate is None:
@@ -135,10 +148,66 @@ def meta2xml(only_public=False):
                                model=epoch['seismometer type'],
                                serial_number=epoch['seismometer id'])
 
-            for sr in srs:
+            for stream in srs:
+                if '->' in stream:
+                    if ':' in stream:
+                        decimate, cascade = stream.split(':')
+                    else:
+                        decimate, cascade = stream, None
+                    sr, sr2 = map(int, decimate.split('->'))
+                else:
+                    sr = int(stream)
+                    decimate = None
                 k1_sr = copy(k1)
                 k1_sr[-1] = k1_sr[-1].format(sr=sr)
                 response = nrl.get_response(k1_sr, k2)
+                # add decimation stages
+                if decimate:
+                    nstage = len(response.response_stages) + 1
+                    prev_stage = response.response_stages[-1]
+                    units = prev_stage.output_units
+                    reffreq = prev_stage.stage_gain_frequency
+                    assert sr % sr2 == 0
+                    if cascade is None:
+                        dec_stages = [CoefficientsTypeResponseStage(
+                            nstage, 1, reffreq, units, units, 'DIGITAL',
+                            numerator=[1], denominator=[],
+                            decimation_input_sample_rate=sr,
+                            decimation_factor=sr // sr2,
+                            decimation_offset=0, decimation_delay=0,
+                            decimation_correction=0
+                            )]
+                        sr = sr2
+                    else:
+                        dec_stages = []
+                        for i, lp in enumerate(cascade.split('-')):
+                            coeffs = list(map(float, filters[lp]['coefficients'].split()))
+                            decfac = int(filters[lp]['decimation'])
+                            npts = int(filters[lp]['number'])
+                            sym = filters[lp]['symmetry'].upper()
+                            if sym == 'EVEN':
+                                coeffs = coeffs + coeffs[::-1]
+                            else:
+                                # SeisComp Warning: The coefficients for non-symmetric (minimum-phase)
+                                # FIR filters in the filters.fir file are stored in reverse order.
+                                coeffs = coeffs[::-1]
+                                raise NotImplementedError()
+                            assert len(coeffs) == npts
+                            assert sr % decfac == 0
+                            st = CoefficientsTypeResponseStage(
+                                nstage + i, 1, reffreq, units, units, 'DIGITAL',
+                                name=lp, numerator=coeffs, denominator=[],
+                                decimation_input_sample_rate=sr,
+                                decimation_factor=decfac,
+                                decimation_offset=0, decimation_delay=0,
+                                decimation_correction=0
+                                )
+                            dec_stages.append(st)
+                            sr = sr // decfac
+                    assert sr == sr2
+                    response.response_stages.extend(dec_stages)
+                    # from IPython import embed
+                    # embed()
                 sum_sens = 0
                 if k2 == ['HGS Products','HG-6','4.5 Hz','9090 Ohms (B coil)']:
                     reffreq = response.instrument_sensitivity.frequency
@@ -249,7 +318,7 @@ STORAGE = 'Steim2'
 
 DEFAULT_LOC_CHA_CODE = '.?H'
 DEFAULT_SRS = '100'
-SR2CODE = {200: 'H', 100: 'H', 20: 'B', 1: 'L'}
+SR2CODE = {1000: 'G', 400: 'D', 200: 'H', 100: 'H', 20: 'B', 1: 'L'}
 COMP2AZIDIP = {'Z': (0, -90), 'N': (0, 0), 'E': (90, 0)}
 
 SHM_LOC = '{:5}  lat:{:+.6f}  lon:{:+.6f}  elevation:{:.1f}  name:{}'

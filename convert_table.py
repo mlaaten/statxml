@@ -52,7 +52,7 @@ def load_seism_NRL():
 
 def load_digi_NRL():
     lines = csv2list('digitizer_NRL')
-    return {line[0]: _strip_keys(line[1]) for line in lines}
+    return {line[0]: _strip_keys(line[1]) for line in lines}, {line[0]: float(line[3]) for line in lines if line[3]}
 
 def load_filters():
     return csv2dict('filters')
@@ -64,7 +64,7 @@ def _date2sh(utc):
 def write_gain_expressions_for_table():
     """Write expressions for google tables into file"""
     seism_NRL = load_seism_NRL()
-    digi_NRL = load_digi_NRL()
+    digi_NRL, _ = load_digi_NRL()
     nrl = NRL()
     for v in digi_NRL.values():
         v[-1] = v[-1].format(sr=100)
@@ -105,7 +105,7 @@ def meta2xml(only_public=False):
     for sta in tsn:
         tsn[sta] = sorted(tsn[sta], key = lambda epoch: epoch['UTC_starttime'])
     seism_NRL = load_seism_NRL()
-    digi_NRL = load_digi_NRL()
+    digi_NRL, digi_sens = load_digi_NRL()
     gain = load_gain()
     nrl = NRL()
     for sta in tsn:
@@ -161,6 +161,9 @@ def meta2xml(only_public=False):
                 k1_sr = copy(k1)
                 k1_sr[-1] = k1_sr[-1].format(sr=sr)
                 response = nrl.get_response(k1_sr, k2)
+                # digitizer gain different from NRL
+                if epoch['digitizer'] in digi_sens:
+                    response.response_stages[2].stage_gain = digi_sens[epoch['digitizer']]
                 # add decimation stages
                 if decimate:
                     nstage = len(response.response_stages) + 1
@@ -206,8 +209,6 @@ def meta2xml(only_public=False):
                             sr = sr // decfac
                     assert sr == sr2
                     response.response_stages.extend(dec_stages)
-                    # from IPython import embed
-                    # embed()
                 sum_sens = 0
                 if k2 == ['HGS Products','HG-6','4.5 Hz','9090 Ohms (B coil)']:
                     reffreq = response.instrument_sensitivity.frequency
@@ -218,9 +219,6 @@ def meta2xml(only_public=False):
                 response.instrument_sensitivity.input_units = stage0.input_units
                 response.instrument_sensitivity.input_units_description = stage0.input_units_description
                 response.recalculate_overall_sensitivity(reffreq)
-                if epoch['intern remarks'] == '!NRLdigi':
-                    digita = {line[0]: _strip_keys(line[2]) for line in csv2list('digitizer_NRL')}
-                    response.response_stages[2].stage_gain = float(digita[data_logger.description][0])
                 for comp in 'ZNE':
                     cha_code = cha_code_template.replace('?', SR2CODE[sr]) + comp
                     seed_id = '.'.join([NET_CODE, sta_code, loc_code, cha_code])

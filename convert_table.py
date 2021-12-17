@@ -2,6 +2,7 @@ import csv
 import json
 from collections import defaultdict
 from copy import copy, deepcopy
+import numpy as np
 from obspy import UTCDateTime as UTC, read_inventory
 from obspy.clients.nrl import NRL
 from obspy.core.inventory import Inventory, Network, Station, Channel, Site, Equipment
@@ -61,6 +62,13 @@ def _date2sh(utc):
     return '...' if utc is None else from_utcdatetime(utc).lower()[:17]
 
 
+def calc_fc(response):
+    f = np.logspace(-4, 2, 101)
+    r = np.abs(response.get_evalresp_response_for_frequencies(f))
+    i = np.nonzero(r>=np.max(r)/2**0.5)[0][0]
+    return f[i]
+
+
 def write_gain_expressions_for_table():
     """Write expressions for google tables into file"""
     seism_NRL = load_seism_NRL()
@@ -112,6 +120,7 @@ def meta2xml(only_public=False):
         sta_startdate = None
         channels = []
         for epoch in tsn[sta]:
+            fc = 0
             if only_public and epoch['public'] != 'TRUE':
                 continue
             setdefault(epoch, 'seismometer id')
@@ -219,6 +228,8 @@ def meta2xml(only_public=False):
                 response.instrument_sensitivity.input_units = stage0.input_units
                 response.instrument_sensitivity.input_units_description = stage0.input_units_description
                 response.recalculate_overall_sensitivity(reffreq)
+                if fc == 0 and response.instrument_sensitivity.input_units == 'M/S':
+                    fc = calc_fc(response)
                 for comp in 'ZNE':
                     cha_code = cha_code_template.replace('?', SR2CODE[sr]) + comp
                     seed_id = '.'.join([NET_CODE, sta_code, loc_code, cha_code])
@@ -276,7 +287,7 @@ def meta2xml(only_public=False):
         shm_loc.append(SHM_LOC.format(*fargs))
         fargs = (sta_code, name, lat, lon, elev,
                  sens, 1e9 / sens,
-                 chresponse.get_paz().normalization_factor,
+                 fc, chresponse.get_paz().normalization_factor,
                  chresponse.get_paz().zeros, chresponse.get_paz().poles)
         info.append(INFO.format(*fargs))
         stations.append(Station(code=sta_code, latitude=lat, longitude=lon,
@@ -322,7 +333,7 @@ COMP2AZIDIP = {'Z': (0, -90), 'N': (0, 0), 'E': (90, 0)}
 SHM_LOC = '{:5}  lat:{:+.6f}  lon:{:+.6f}  elevation:{:.1f}  name:{}'
 SHM_SENS = '{}-{}-{} {} {} {:.5f}'
 INFO_INFO = 'code  name                      lat     lon     elev   gain      SH    PAZ'
-INFO = '{:5} {:25} {:.3f}  {:.3f}  {:.1f}  {:.2e}  {:.2f}  norm:{:.2e} zeros:{} poles:{}'
+INFO = '{:5} {:25} {:.3f}  {:.3f}  {:.1f}  {:.2e}  {:.2f}  fc:{:.3}Hz norm:{:.2e} zeros:{} poles:{}'
 
 
 write_gain_expressions_for_table()

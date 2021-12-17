@@ -63,7 +63,7 @@ def _date2sh(utc):
 
 
 def calc_fc(response):
-    f = np.logspace(-4, 2, 101)
+    f = np.logspace(-3, 2, 1000)
     r = np.abs(response.get_evalresp_response_for_frequencies(f))
     i = np.nonzero(r>=np.max(r)/2**0.5)[0][0]
     return f[i]

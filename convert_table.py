@@ -333,7 +333,7 @@ COMP2AZIDIP = {'Z': (0, -90), 'N': (0, 0), 'E': (90, 0)}
 SHM_LOC = '{:5}  lat:{:+.6f}  lon:{:+.6f}  elevation:{:.1f}  name:{}'
 SHM_SENS = '{}-{}-{} {} {} {:.5f}'
 INFO_INFO = 'code  name                      lat     lon     elev   gain      SH    PAZ'
-INFO = '{:5} {:25} {:.3f}  {:.3f}  {:.1f}  {:.2e}  {:.2f}  fc:{:.3}Hz norm:{:.2e} zeros:{} poles:{}'
+INFO = '{:5} {:25} {:.3f}  {:.3f}  {:.1f}  {:.2e}  {:.2f}  fc:{:.3f}Hz norm:{:.2e} zeros:{} poles:{}'
 
 
 write_gain_expressions_for_table()

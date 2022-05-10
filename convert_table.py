@@ -1,3 +1,4 @@
+# MIT license, Copyright Tom Eulenfeld
 import csv
 import json
 from collections import defaultdict
@@ -53,7 +54,7 @@ def load_seism_NRL():
 
 def load_digi_NRL():
     lines = csv2list('digitizer_NRL')
-    return {line[0]: _strip_keys(line[1]) for line in lines}, {line[0]: float(line[3]) for line in lines if line[3]}
+    return {line[0]: _strip_keys(line[1]) if line[1] else None for line in lines}, {line[0]: float(line[3]) for line in lines if line[3]}
 
 def load_filters():
     return csv2dict('filters')
@@ -75,9 +76,10 @@ def write_gain_expressions_for_table():
     digi_NRL, _ = load_digi_NRL()
     nrl = NRL()
     for v in digi_NRL.values():
-        v[-1] = v[-1].format(sr=100)
+        if v:
+            v[-1] = v[-1].format(sr=100)
     # get sensitivities
-    digi_sens = {k: nrl.get_datalogger_response(v).instrument_sensitivity.value for k, v in digi_NRL.items()}
+    digi_sens = {k: nrl.get_datalogger_response(v).instrument_sensitivity.value for k, v in digi_NRL.items() if v}
     seism_sens = {k: nrl.get_sensor_response(v).instrument_sensitivity.value for k, v in seism_NRL.items()}
     expr = ('expression for digi_NRL:\n=SWITCH(A2, {}, "")\n\n'
             'expression for seism_NRL:\n=SWITCH(A2, {}, "")')
@@ -92,6 +94,68 @@ def setdefault(dict_, key, default=None):
     if dict_[key] == '':
         dict_[key] = default
     return dict_[key]
+
+
+def add_digitizer_reponse_not_in_nrl(response, digi_sens, sr):
+    sensor_stage = response.response_stages[0]
+    units = sensor_stage.output_units
+    reffreq = 1
+    digi_stage = CoefficientsTypeResponseStage(
+        2, digi_sens, reffreq, units, 'COUNTS', 'DIGITAL',
+        numerator=[1], denominator=[],
+        decimation_input_sample_rate=sr,
+        decimation_factor=1,
+        decimation_offset=0, decimation_delay=0,
+        decimation_correction=0
+        )
+    response.response_stages = [sensor_stage, digi_stage]
+
+
+def add_software_decimation_stages(response, sr, sr2, filters, cascade):
+    nstage = len(response.response_stages) + 1
+    prev_stage = response.response_stages[-1]
+    units = prev_stage.output_units
+    reffreq = prev_stage.stage_gain_frequency
+    assert sr % sr2 == 0
+    if cascade is None:
+        dec_stages = [CoefficientsTypeResponseStage(
+            nstage, 1, reffreq, units, units, 'DIGITAL',
+            numerator=[1], denominator=[],
+            decimation_input_sample_rate=sr,
+            decimation_factor=sr // sr2,
+            decimation_offset=0, decimation_delay=0,
+            decimation_correction=0
+            )]
+        sr = sr2
+    else:
+        dec_stages = []
+        for i, lp in enumerate(cascade.split('-')):
+            coeffs = list(map(float, filters[lp]['coefficients'].split()))
+            decfac = int(filters[lp]['decimation'])
+            npts = int(filters[lp]['number'])
+            sym = filters[lp]['symmetry'].upper()
+            if sym == 'EVEN':
+                coeffs = coeffs + coeffs[::-1]
+            else:
+                # SeisComp Warning: The coefficients for non-symmetric (minimum-phase)
+                # FIR filters in the filters.fir file are stored in reverse order.
+                coeffs = coeffs[::-1]
+                raise NotImplementedError()
+            assert len(coeffs) == npts
+            assert sr % decfac == 0
+            st = CoefficientsTypeResponseStage(
+                nstage + i, 1, reffreq, units, units, 'DIGITAL',
+                name=lp, numerator=coeffs, denominator=[],
+                decimation_input_sample_rate=sr,
+                decimation_factor=decfac,
+                decimation_offset=0, decimation_delay=0,
+                decimation_correction=0
+                )
+            dec_stages.append(st)
+            sr = sr // decfac
+    assert sr == sr2
+    response.response_stages.extend(dec_stages)
+
 
 class ConfigJSONDecoder(json.JSONDecoder):
     """Decode JSON config with comments stripped"""
@@ -149,7 +213,7 @@ def meta2xml(only_public=False):
                        'problem with coordinates, seismometer or digitizer')
                 print(msg.format(**epoch))
                 continue
-            data_logger = Equipment(manufacturer=k1[0],
+            data_logger = Equipment(manufacturer=k1[0] if k1 else None,
                                     description=epoch['digitizer'],
                                     model=epoch['digitizer'].split('_')[0])
             sensor = Equipment(manufacturer=k2[0],
@@ -167,57 +231,20 @@ def meta2xml(only_public=False):
                 else:
                     sr = int(stream)
                     decimate = None
-                k1_sr = copy(k1)
-                k1_sr[-1] = k1_sr[-1].format(sr=sr)
-                response = nrl.get_response(k1_sr, k2)
-                # digitizer gain different from NRL
-                if epoch['digitizer'] in digi_sens:
-                    response.response_stages[2].stage_gain = digi_sens[epoch['digitizer']]
-                # add decimation stages
+                if k1:
+                    # digitizer in NRL
+                    k1_sr = copy(k1)
+                    k1_sr[-1] = k1_sr[-1].format(sr=sr)
+                    response = nrl.get_response(k1_sr, k2)
+                    # digitizer gain different from NRL
+                    if epoch['digitizer'] in digi_sens:
+                        response.response_stages[2].stage_gain = digi_sens[epoch['digitizer']]
+                else:
+                    # digitizer not in NRL
+                    response = nrl.get_sensor_response(k2)
+                    add_digitizer_reponse_not_in_nrl(response, digi_sens[epoch['digitizer']], sr)
                 if decimate:
-                    nstage = len(response.response_stages) + 1
-                    prev_stage = response.response_stages[-1]
-                    units = prev_stage.output_units
-                    reffreq = prev_stage.stage_gain_frequency
-                    assert sr % sr2 == 0
-                    if cascade is None:
-                        dec_stages = [CoefficientsTypeResponseStage(
-                            nstage, 1, reffreq, units, units, 'DIGITAL',
-                            numerator=[1], denominator=[],
-                            decimation_input_sample_rate=sr,
-                            decimation_factor=sr // sr2,
-                            decimation_offset=0, decimation_delay=0,
-                            decimation_correction=0
-                            )]
-                        sr = sr2
-                    else:
-                        dec_stages = []
-                        for i, lp in enumerate(cascade.split('-')):
-                            coeffs = list(map(float, filters[lp]['coefficients'].split()))
-                            decfac = int(filters[lp]['decimation'])
-                            npts = int(filters[lp]['number'])
-                            sym = filters[lp]['symmetry'].upper()
-                            if sym == 'EVEN':
-                                coeffs = coeffs + coeffs[::-1]
-                            else:
-                                # SeisComp Warning: The coefficients for non-symmetric (minimum-phase)
-                                # FIR filters in the filters.fir file are stored in reverse order.
-                                coeffs = coeffs[::-1]
-                                raise NotImplementedError()
-                            assert len(coeffs) == npts
-                            assert sr % decfac == 0
-                            st = CoefficientsTypeResponseStage(
-                                nstage + i, 1, reffreq, units, units, 'DIGITAL',
-                                name=lp, numerator=coeffs, denominator=[],
-                                decimation_input_sample_rate=sr,
-                                decimation_factor=decfac,
-                                decimation_offset=0, decimation_delay=0,
-                                decimation_correction=0
-                                )
-                            dec_stages.append(st)
-                            sr = sr // decfac
-                    assert sr == sr2
-                    response.response_stages.extend(dec_stages)
+                    add_software_decimation_stages(response, sr, sr2, filters, cascade)
                 sum_sens = 0
                 if k2 == ['HGS Products','HG-6','4.5 Hz','9090 Ohms (B coil)']:
                     reffreq = response.instrument_sensitivity.frequency
@@ -257,7 +284,6 @@ def meta2xml(only_public=False):
                               dip=COMP2AZIDIP[comp][1],
                               sample_rate=sr, response=chresponse,
                               start_date=startdate, end_date=enddate,
-                              storage_format=STORAGE,
                               sensor=sensor, data_logger=data_logger)
                     channels.append(Channel(**kw))
                     fargs = (sta_code.lower(), cha_code.lower()[:2], comp.lower(),
@@ -323,8 +349,6 @@ OUT = CONF['OUT']
 RESP = CONF['RESP']
 NET_CODE = CONF['NET_CODE']
 
-STORAGE = 'Steim2'
-
 DEFAULT_LOC_CHA_CODE = '.?H'
 DEFAULT_SRS = '100'
 SR2CODE = {1000: 'G', 400: 'D', 200: 'H', 100: 'H', 20: 'B', 1: 'L'}
@@ -339,3 +363,8 @@ INFO = '{:5} {:25} {:.3f}  {:.3f}  {:.1f}  {:.2e}  {:.2f}  fc:{:.3f}Hz norm:{:.2
 write_gain_expressions_for_table()
 meta2xml(only_public=True)
 meta2xml(only_public=False)
+
+# Warning:
+# UserWarning: More than one PolesZerosResponseStage encountered. Returning first one found.
+# is raised, because Centaur datalogger has an additional PAZ defined.
+# Can be ignored.

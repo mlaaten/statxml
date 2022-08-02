@@ -229,7 +229,7 @@ def meta2xml(only_public=False):
                         decimate, cascade = stream, None
                     sr, sr2 = map(int, decimate.split('->'))
                 else:
-                    sr = int(stream)
+                    sr = sr2 = int(stream)
                     decimate = None
                 if k1:
                     # digitizer in NRL
@@ -249,7 +249,7 @@ def meta2xml(only_public=False):
                 if k2 == ['HGS Products','HG-6','4.5 Hz','9090 Ohms (B coil)']:
                     reffreq = response.instrument_sensitivity.frequency
                 else:
-                    reffreq = 0.4 if sr < 2 else 1.0
+                    reffreq = 0.4 if sr2 < 2 else 1.0
                 # see obspy PR #2248
                 stage0 = response.response_stages[0]
                 response.instrument_sensitivity.input_units = stage0.input_units
@@ -258,7 +258,7 @@ def meta2xml(only_public=False):
                 if fc == 0 and response.instrument_sensitivity.input_units == 'M/S':
                     fc = calc_fc(response)
                 for comp in 'ZNE':
-                    cha_code = cha_code_template.replace('?', SR2CODE[sr]) + comp
+                    cha_code = cha_code_template.replace('?', SR2CODE[sr2]) + comp
                     seed_id = '.'.join([NET_CODE, sta_code, loc_code, cha_code])
                     path1 = f'{RESP}{seed_id}_{startdate!s:.10}.resp'
                     path2 = f'{RESP}{seed_id}.resp'

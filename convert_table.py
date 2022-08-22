@@ -282,7 +282,7 @@ def meta2xml(only_public=False):
                               elevation=elev, depth=0,
                               azimuth=COMP2AZIDIP[comp][0],
                               dip=COMP2AZIDIP[comp][1],
-                              sample_rate=sr, response=chresponse,
+                              sample_rate=sr2, response=chresponse,
                               start_date=startdate, end_date=enddate,
                               sensor=sensor, data_logger=data_logger)
                     channels.append(Channel(**kw))

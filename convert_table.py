@@ -50,7 +50,7 @@ def load_gain():
 
 def load_seism_NRL():
     lines = csv2list('seismometer_NRL')
-    return {line[0]: _strip_keys(line[1]) for line in lines}
+    return {line[0]: _strip_keys(line[1]) for line in lines}, {line[0]: float(line[3]) for line in lines if line[3]}
 
 def load_digi_NRL():
     lines = csv2list('digitizer_NRL')
@@ -72,7 +72,7 @@ def calc_fc(response):
 
 def write_gain_expressions_for_table():
     """Write expressions for google tables into file"""
-    seism_NRL = load_seism_NRL()
+    seism_NRL, _ = load_seism_NRL()
     digi_NRL, _ = load_digi_NRL()
     nrl = NRL()
     for v in digi_NRL.values():
@@ -176,7 +176,7 @@ def meta2xml(only_public=False):
     # coordinates
     for sta in tsn:
         tsn[sta] = sorted(tsn[sta], key = lambda epoch: epoch['UTC_starttime'])
-    seism_NRL = load_seism_NRL()
+    seism_NRL, reffreqs = load_seism_NRL()
     digi_NRL, digi_sens = load_digi_NRL()
     gain = load_gain()
     nrl = NRL()
@@ -246,10 +246,10 @@ def meta2xml(only_public=False):
                 if decimate:
                     add_software_decimation_stages(response, sr, sr2, filters, cascade)
                 sum_sens = 0
-                if k2 == ['HGS Products','HG-6','4.5 Hz','9090 Ohms (B coil)']:
-                    reffreq = response.instrument_sensitivity.frequency
+                if sr2 >= 2:
+                    reffreq = reffreqs.get(epoch['seismometer type'], 1.)
                 else:
-                    reffreq = 0.4 if sr2 < 2 else 1.0
+                    reffreq = 0.4
                 # see obspy PR #2248
                 stage0 = response.response_stages[0]
                 response.instrument_sensitivity.input_units = stage0.input_units

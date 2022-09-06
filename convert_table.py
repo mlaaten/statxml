@@ -257,7 +257,13 @@ def meta2xml(only_public=False):
                 response.recalculate_overall_sensitivity(reffreq)
                 if fc == 0 and response.instrument_sensitivity.input_units == 'M/S':
                     fc = calc_fc(response)
-                for comp in 'ZNE':
+                if len(cha_code_template) == 3:
+                    comps = cha_code_template[-1]
+                    cha_code_template = cha_code_template[:-1]
+                    print(f'Define only one component: {comps}')
+                else:
+                    comps = 'ZNE'
+                for comp in comps:
                     cha_code = cha_code_template.replace('?', SR2CODE[sr2]) + comp
                     seed_id = '.'.join([NET_CODE, sta_code, loc_code, cha_code])
                     path1 = f'{RESP}{seed_id}_{startdate!s:.10}.resp'

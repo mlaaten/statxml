@@ -50,7 +50,7 @@ def load_gain():
 
 def load_seism_NRL():
     lines = csv2list('seismometer_NRL')
-    return {line[0]: _strip_keys(line[1]) for line in lines}, {line[0]: float(line[3]) for line in lines if line[3]}
+    return {line[0]: _strip_keys(line[1]) if line[1] else None for line in lines}, {line[0]: float(line[3]) for line in lines if line[3]}
 
 def load_digi_NRL():
     lines = csv2list('digitizer_NRL')
@@ -80,7 +80,7 @@ def write_gain_expressions_for_table():
             v[-1] = v[-1].format(sr=100)
     # get sensitivities
     digi_sens = {k: nrl.get_datalogger_response(v).instrument_sensitivity.value for k, v in digi_NRL.items() if v}
-    seism_sens = {k: nrl.get_sensor_response(v).instrument_sensitivity.value for k, v in seism_NRL.items()}
+    seism_sens = {k: nrl.get_sensor_response(v).instrument_sensitivity.value for k, v in seism_NRL.items() if v}
     expr = ('expression for digi_NRL:\n=SWITCH(A2, {}, "")\n\n'
             'expression for seism_NRL:\n=SWITCH(A2, {}, "")')
     ins1 = ', '.join('"{}", {}'.format(k, v) for k, v in digi_sens.items())

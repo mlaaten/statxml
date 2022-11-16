@@ -3,7 +3,9 @@
 Changes
 dev
   * specify different config file with `-c conf_SX.json`
+  * start debugger upon error with `--pdb`
   * set default connfig file name to conf.json
+  * support using offline NRL (faster) by setting NRL config parameter
 v0.1.0
   * start versioning
 
@@ -15,13 +17,26 @@ from collections import defaultdict
 from copy import copy, deepcopy
 import numpy as np
 from obspy import UTCDateTime as UTC, read_inventory
-from obspy.clients.nrl import NRL
+from obspy.clients.nrl import NRL as NRLClient
 from obspy.core.inventory import Inventory, Network, Station, Channel, Site, Equipment
 from obspy.core.inventory.response import CoefficientsTypeResponseStage
 from obspy.io.sh.core import from_utcdatetime
 #from obspy.core.util import AttribDict
 import os.path
-
+try:
+    from tqdm import tqdm
+except ImportError:
+    def tqdm(iter_):
+        return iter_
+else:
+    # hack, see https://stackoverflow.com/a/38345993
+    old_print = print
+    def new_print(*args, **kwargs):
+        try:
+            tqdm.write(*args, **kwargs)
+        except:
+            old_print(*args, ** kwargs)
+    print = new_print
 
 
 def csv2list(name):
@@ -62,7 +77,8 @@ def load_seism_NRL():
     lines = csv2list('seismometer_NRL')
     return {line[0]: _strip_keys(line[1]) if line[1] else None for line in lines}, {line[0]: float(line[3]) for line in lines if line[3]}
 
-def load_digi_NRL():
+def load_digi_table():
+    # return two dicts, one with NRL keys, the other with sensitivities
     lines = csv2list('digitizer_NRL')
     return {line[0]: _strip_keys(line[1]) if line[1] else None for line in lines}, {line[0]: float(line[3]) for line in lines if line[3]}
 
@@ -83,14 +99,13 @@ def calc_fc(response):
 def write_gain_expressions_for_table():
     """Write expressions for google tables into file"""
     seism_NRL, _ = load_seism_NRL()
-    digi_NRL, _ = load_digi_NRL()
-    nrl = NRL()
+    digi_NRL, _ = load_digi_table()
     for v in digi_NRL.values():
         if v:
             v[-1] = v[-1].format(sr=100)
     # get sensitivities
-    digi_sens = {k: nrl.get_datalogger_response(v).instrument_sensitivity.value for k, v in digi_NRL.items() if v}
-    seism_sens = {k: nrl.get_sensor_response(v).instrument_sensitivity.value for k, v in seism_NRL.items() if v}
+    digi_sens = {k: NRL.get_datalogger_response(v).instrument_sensitivity.value for k, v in digi_NRL.items() if v}
+    seism_sens = {k: NRL.get_sensor_response(v).instrument_sensitivity.value for k, v in seism_NRL.items() if v}
     expr = ('expression for digi_NRL:\n=SWITCH(A2, {}, "")\n\n'
             'expression for seism_NRL:\n=SWITCH(A2, {}, "")')
     ins1 = ', '.join('"{}", {}'.format(k, v) for k, v in digi_sens.items())
@@ -187,11 +202,11 @@ def meta2xml(only_public=False):
     for sta in tsn:
         tsn[sta] = sorted(tsn[sta], key = lambda epoch: epoch['UTC_starttime'])
     seism_NRL, reffreqs = load_seism_NRL()
-    digi_NRL, digi_sens = load_digi_NRL()
+    digi_NRL, digi_sens = load_digi_table()
     gain = load_gain()
-    nrl = NRL()
-    for sta in tsn:
+    for sta in tqdm(tsn):
         sta_startdate = None
+        sta_coords = None
         channels = []
         for epoch in tsn[sta]:
             fc = 0
@@ -215,14 +230,20 @@ def meta2xml(only_public=False):
                 lat = float(epoch['latitude'])
                 lon = float(epoch['longitude'])
                 elev = float(epoch['elevation'])
+                depth = float(epoch['elevation'])
                 k1 = digi_NRL[epoch['digitizer']]
                 k2 = seism_NRL[epoch['seismometer type']]
             except (ValueError, KeyError):
                 lat, lon, elev, k1, k2 = None, None, None, None, None
-                msg = ('Ignore epoch {station code} {UTC_starttime} -- '
+                msg = ('{station code} {UTC_starttime} -- Ignore epoch, '
                        'problem with coordinates, seismometer or digitizer')
                 print(msg.format(**epoch))
                 continue
+            if sta_coords is None:
+                sta_coords = (lat, lon, elev)
+            elif sta_coords != 'invalid' and sta_coords != (lat, lon, elev):
+                sta_coords = 'invalid'
+                print(f'{sta_code} is moving! Coordinates at station level will reflect latest epoch.')
             data_logger = Equipment(manufacturer=k1[0] if k1 else None,
                                     description=epoch['digitizer'],
                                     model=epoch['digitizer'].split('_')[0])
@@ -245,13 +266,13 @@ def meta2xml(only_public=False):
                     # digitizer in NRL
                     k1_sr = copy(k1)
                     k1_sr[-1] = k1_sr[-1].format(sr=sr)
-                    response = nrl.get_response(k1_sr, k2)
+                    response = NRL.get_response(k1_sr, k2)
                     # digitizer gain different from NRL
                     if epoch['digitizer'] in digi_sens:
                         response.response_stages[2].stage_gain = digi_sens[epoch['digitizer']]
                 else:
                     # digitizer not in NRL
-                    response = nrl.get_sensor_response(k2)
+                    response = NRL.get_sensor_response(k2)
                     add_digitizer_reponse_not_in_nrl(response, digi_sens[epoch['digitizer']], sr)
                 if decimate:
                     add_software_decimation_stages(response, sr, sr2, filters, cascade)
@@ -357,12 +378,25 @@ def meta2xml(only_public=False):
 
 
 parser = argparse.ArgumentParser(description='Create StationXML from csv files')
-parser.add_argument('-c', '--conf', default='conf.json', help='name of config file (default: conf.json)')
-with open(parser.parse_args().conf) as f:
+parser.add_argument('-c', '--conf', default='conf.json', help='Name of config file (default: conf.json)')
+parser.add_argument('--pdb', action='store_true', help='Start the debugger upon exception')
+parser.add_argument('-o', '--only', choices=['public', 'private', 'expr'], help='Only do some stuff')
+cliargs = parser.parse_args()
+if cliargs.pdb:
+    import pdb
+    import sys
+    import traceback
+    def info(type, value, tb):
+        traceback.print_exception(type, value, tb)
+        print()
+        pdb.pm()
+    sys.excepthook = info
+with open(cliargs.conf) as f:
     CONF = json.load(f, cls=ConfigJSONDecoder)
 OUT = CONF['OUT']
 RESP = CONF['RESP']
 NET_CODE = CONF['NET_CODE']
+NRL = NRLClient(CONF['NRL']) if CONF.get('NRL') is not None else NRLClient()
 
 DEFAULT_LOC_CHA_CODE = '.?H'
 DEFAULT_SRS = '100'
@@ -374,10 +408,12 @@ SHM_SENS = '{}-{}-{} {} {} {:.5f}'
 INFO_INFO = 'code  name                      lat     lon     elev   gain      SH    PAZ'
 INFO = '{:5} {:25} {:.3f}  {:.3f}  {:.1f}  {:.2e}  {:.2f}  fc:{:.3f}Hz norm:{:.2e} zeros:{} poles:{}'
 
-
-write_gain_expressions_for_table()
-meta2xml(only_public=True)
-meta2xml(only_public=False)
+if cliargs.only and cliargs.only == 'expr':
+    write_gain_expressions_for_table()
+if cliargs.only and cliargs.only == 'public':
+    meta2xml(only_public=True)
+if cliargs.only and cliargs.only == 'private':
+    meta2xml(only_public=False)
 
 # Warning:
 # UserWarning: More than one PolesZerosResponseStage encountered. Returning first one found.

@@ -1,5 +1,6 @@
 ###Config file
 {
+"NRL": "nrl/",
 #Output path
 "OUT": "metadata/",
 #Temporary data path

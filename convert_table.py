@@ -1,4 +1,11 @@
 # MIT license, Copyright Tom Eulenfeld
+"""
+Changes
+
+v0.1.0
+  * start versioning
+
+"""
 import csv
 import json
 from collections import defaultdict

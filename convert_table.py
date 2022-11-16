@@ -80,7 +80,7 @@ def load_seism_NRL():
 
 def load_digi_table():
     # return two dicts, one with NRL keys, the other with sensitivities
-    lines = csv2list('digitizer_NRL')
+    lines = csv2list('digitizer')
     return {line[0]: _strip_keys(line[1]) if line[1] else None for line in lines}, {line[0]: float(line[3]) for line in lines if line[3]}
 
 def load_filters():

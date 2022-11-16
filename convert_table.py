@@ -1,11 +1,14 @@
 # MIT license, Copyright Tom Eulenfeld
 """
 Changes
-
+dev
+  * specify different config file with `-c conf_SX.json`
+  * set default connfig file name to conf.json
 v0.1.0
   * start versioning
 
 """
+import argparse
 import csv
 import json
 from collections import defaultdict
@@ -353,10 +356,9 @@ def meta2xml(only_public=False):
     print()
 
 
-
-
-
-with open('config.json') as f:
+parser = argparse.ArgumentParser(description='Create StationXML from csv files')
+parser.add_argument('-c', '--conf', default='conf.json', help='name of config file (default: conf.json)')
+with open(parser.parse_args().conf) as f:
     CONF = json.load(f, cls=ConfigJSONDecoder)
 OUT = CONF['OUT']
 RESP = CONF['RESP']

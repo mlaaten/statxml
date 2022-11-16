@@ -367,6 +367,7 @@ def meta2xml(only_public=False):
     inv = Inventory(networks=[net], source=CONF['SOURCE'])
     fname = NET_CODE + '_private' * (not only_public)
     inv.write(OUT + fname + '.xml', 'STATIONXML', validate=True)
+    inv.write(OUT + fname + '.txt', 'STATIONTXT', validate=True)
     with open(OUT + 'SH_' + fname + '_statinf.dat', 'w') as f:
         f.write('\n'.join(shm_loc))
     with open(OUT + 'SH_' + fname + '_sensitivities.txt', 'w') as f:

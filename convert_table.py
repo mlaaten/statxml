@@ -6,6 +6,7 @@ dev
   * start debugger upon error with `--pdb`
   * set default connfig file name to conf.json
   * support using offline NRL (faster) by setting NRL config parameter
+  * subtract new depth column from elevation for channel epochs (StationXML definition)
 v0.1.0
   * start versioning
 
@@ -316,7 +317,7 @@ def meta2xml(only_public=False):
                     # create channel
                     kw = dict(code=cha_code, location_code=loc_code,
                               latitude=lat, longitude=lon,
-                              elevation=elev, depth=0,
+                              elevation=elev-depth, depth=depth,
                               azimuth=COMP2AZIDIP[comp][0],
                               dip=COMP2AZIDIP[comp][1],
                               sample_rate=sr2, response=chresponse,

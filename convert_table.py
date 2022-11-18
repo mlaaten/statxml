@@ -42,6 +42,12 @@ else:
     print = new_print
 
 
+class ConfigJSONDecoder(json.JSONDecoder):
+    """Decode JSON config with comments stripped"""
+    def decode(self, s):
+        s = '\n'.join(l.split('#', 1)[0] for l in s.split('\n'))
+        return super(ConfigJSONDecoder, self).decode(s)
+
 def csv2list(name):
     fname  = CONF['TNAME'].format(name)
     with open(fname) as f:
@@ -65,9 +71,8 @@ def csv2dict(name, colkey='name'):
     with open(fname) as f:
         reader = csv.DictReader(f)
         for line in reader:
-            if colkey in line:
-                if line[colkey]:
-                    d[line[colkey]] = line
+            if line[colkey] != '':
+                d[line[colkey]] = line
     return d
 
 def _strip_keys(keys):
@@ -83,10 +88,10 @@ def load_tables():
     # seismometer -> dict of NRL keys, PAZ, etc
     seismometers = csv2dict('seismometer', colkey='seismometer')
     for line in seismometers.values():
-        for key in line:
-            _setdefault(line, key)  # replace '' with None
+        for k in line:
+            _setdefault(line, k)  # replace '' with None
         for k in ('NRLv1', 'NRLv2'):
-            if line[k]:
+            if line.get(k):
                 line[k] = _strip_keys(line[k])
         for k in ('poles', 'zeros'):
             if line[k]:
@@ -98,12 +103,11 @@ def load_tables():
     seismometers_custom_gain_comp = {
         line[0]: list(map(float, line[2:5]))
         for line in csv2list('seismometer_id') if line[2] != ''}
-    # digitizer -> NRL keys
-    # digitizer -> custom sensitivity
+    # digitizer -> dict of NRL keys, custom sensitivity
     digitizers = csv2dict('digitizer', colkey='digitizer')
     for line in digitizers.values():
-        for key in line:
-            _setdefault(line, key)  # replace '' with None
+        for k in line:
+            _setdefault(line, k)  # replace '' with None
         for k in ('NRLv1', 'NRLv2'):
             if line.get(k):
                 line[k] = _strip_keys(line[k])
@@ -142,7 +146,7 @@ def calc_norm(fc, damp, reffreq=1):
 
 
 def write_info(print_=False):
-    """Write expressions for google tables into file"""
+    """Write out expressions and PAZ info"""
     for v in DIGITIZERS.values():
         if v[NRLKEY]:
             v[NRLKEY][-1] = v[NRLKEY][-1].format(sr=100)
@@ -212,7 +216,7 @@ def add_seis_response_stages():
         v['rstage'] = rstage
 
 
-def digi_response_stages(digitizer, sr):
+def get_digi_response_stages(digitizer, sr):
     v = DIGITIZERS[digitizer]
     gain = v['sensitivity count/V']
     if v[NRLKEY]:
@@ -289,13 +293,7 @@ def add_software_decimation_stages(rstages, sr, sr2, cascade):
     rstages.extend(dec_stages)
 
 
-class ConfigJSONDecoder(json.JSONDecoder):
-    """Decode JSON config with comments stripped"""
-    def decode(self, s):
-        s = '\n'.join(l.split('#', 1)[0] for l in s.split('\n'))
-        return super(ConfigJSONDecoder, self).decode(s)
-
-def meta2xml(only_public=False):
+def csv2xml(only_public=False):
     """Write StationXML, SH sensitivity and statinf"""
     stations = []
     shm_sens = []
@@ -366,7 +364,7 @@ def meta2xml(only_public=False):
                     decimate = None
 
                 ###  create response object
-                digi_stages = digi_response_stages(epoch['digitizer'], sr)
+                digi_stages = get_digi_response_stages(epoch['digitizer'], sr)
                 rstages = [seism['rstage']] + digi_stages
                 if decimate:
                     add_software_decimation_stages(rstages, sr, sr2, cascade)
@@ -463,15 +461,15 @@ def meta2xml(only_public=False):
         stations.append(Station(code=sta_code, latitude=lat, longitude=lon,
                       elevation=elev, creation_date=sta_startdate,
                       restricted_status='open',
-                      site=Site(name=CONF['STA_NAME'].format(name),
+                      site=Site(name=CONF.get('STA_NAME', '{}').format(name),
                                 country='Germany'),
                       channels=channels,
                       start_date=sta_startdate, end_date=enddate))
     net = Network(code=NET_CODE, stations=stations,
-                  description=CONF['NET_DESC'],
+                  description=CONF.get('NET_DESC'),
                   start_date=UTC(CONF['NET_START']), restricted_status='open',
                   identifiers=CONF.get('IDENTIFIERS'))
-    inv = Inventory(networks=[net], source=CONF['SOURCE'])
+    inv = Inventory(networks=[net], source=CONF.get('SOURCE'))
     fname = NET_CODE + '_private' * (not only_public)
     inv.write(OUT + fname + '.xml', 'STATIONXML', validate=True)
     inv.write(OUT + fname + '.txt', 'STATIONTXT', validate=True)
@@ -502,10 +500,10 @@ if cliargs.pdb:
     sys.excepthook = info
 with open(cliargs.conf) as f:
     CONF = json.load(f, cls=ConfigJSONDecoder)
-OUT = CONF['OUT']
-RESP = CONF['RESP']
+OUT = CONF.get('OUT', '')
 NET_CODE = CONF['NET_CODE']
-NRL = NRLClient(CONF['NRL']) if CONF.get('NRL') is not None else NRLClient()
+NRL = NRLClient(CONF['NRLPATH']) if CONF.get('NRLPATH') is not None else NRLClient()
+NRLKEY = CONF.get('NRLKEY', 'NRLv1')
 
 DEFAULT_LOC_CHA_CODE = '.?H'
 DEFAULT_SRS = '100'
@@ -516,8 +514,6 @@ SHM_LOC = '{:5}  lat:{:+.6f}  lon:{:+.6f}  elevation:{:.1f}  name:{}'
 SHM_SENS = '{}-{}-{} {} {} {:.5f}'
 INFO_INFO = 'code  name                      lat     lon     elev   gain      SH    PAZ'
 INFO = '{:5} {:25} {:.3f}  {:.3f}  {:.1f}  {:.2e}  {:.2f}  fc:{:.3f}Hz norm:{:.2e} zeros:{} poles:{}'
-NRLKEY = 'NRLv1'
-
 
 (
     SEISMOMETERS,
@@ -530,9 +526,9 @@ add_seis_response_stages()
 if not cliargs.only or cliargs.only == 'info':
     write_info(print_=(cliargs.only == 'info'))
 if not cliargs.only or cliargs.only == 'public':
-    meta2xml(only_public=True)
+    csv2xml(only_public=True)
 if not cliargs.only or cliargs.only == 'private':
-    meta2xml(only_public=False)
+    csv2xml(only_public=False)
 
 # Warning:
 # UserWarning: More than one PolesZerosResponseStage encountered. Returning first one found.

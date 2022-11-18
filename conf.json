@@ -1,21 +1,27 @@
 ###Config file
 {
-"NRL": "nrl/",
-#Output path
-"OUT": "metadata/",
-#Temporary data path
-"RESP": "metadata/resp/",
-#Table name
+### Mandatory configuration
+# Table names
 "TNAME": "metadata/Stations_{}.csv",
-#Network abbreviation
+# Network code
 "NET_CODE": "TH",
-#Network name
-"NET_DESC": "Thuringia Seismic Network, Uni Jena",
-#Start of the network
+# Start time of the network
 "NET_START": "1980-01-01",
-#Operator
+
+### Optional configuration
+# Network description
+"NET_DESC": "Thuringia Seismic Network, Uni Jena",
+# Operator
 "SOURCE": "Uni Jena",
-#Station name prefix/suffix, if no pre/suffix is desired only "{}"
+# Station name prefix/suffix, if no pre/suffix is desired only "{}"
 "STA_NAME": "UJENA Station {}, Germany",
-"IDENTIFIERS": ["DOI:10.7914/SN/TH"]
+# DOI identifiers
+"IDENTIFIERS": ["DOI:10.7914/SN/TH"],
+
+# Output path
+"OUT": "metadata/",
+# Path to offline NRL version
+"NRLPATH": "nrl/",
+# NRL key in tab, switch to "NRLv2" at some point
+"NRLKEY": "NRLv1"
 }

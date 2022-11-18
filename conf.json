@@ -16,5 +16,6 @@
 #Operator
 "SOURCE": "Uni Jena",
 #Station name prefix/suffix, if no pre/suffix is desired only "{}"
-"STA_NAME": "UJENA Station {}, Germany"
+"STA_NAME": "UJENA Station {}, Germany",
+"IDENTIFIERS": ["DOI:10.7914/SN/TH"]
 }

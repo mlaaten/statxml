@@ -3,7 +3,7 @@
 Changes
 dev
   * specify different config file with `-c conf_SX.json` and other new cli arguments
-  * set default connfig file name to conf.json
+  * set default config file name to conf.json
   * support using offline NRL (faster) by setting NRL config parameter
   * support network DOI
   * specify seismometer responses with poles and zeros or corner frequency and damping
@@ -328,7 +328,7 @@ def csv2xml(only_public=False):
                 lat = float(epoch['latitude'])
                 lon = float(epoch['longitude'])
                 elev = float(epoch['elevation'])
-                depth = float(epoch['elevation'])
+                depth = float(epoch['depth'])
                 digi = DIGITIZERS[epoch['digitizer']]
                 seism = SEISMOMETERS[epoch['seismometer type']]
             except (ValueError, KeyError):

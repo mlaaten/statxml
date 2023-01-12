@@ -147,12 +147,13 @@ def calc_norm(fc, damp, reffreq=1):
 
 def write_info(print_=False):
     """Write out expressions and PAZ info"""
-    for v in DIGITIZERS.values():
+    digitizers = deepcopy(DIGITIZERS)
+    for v in digitizers.values():
         if v[NRLKEY]:
             v[NRLKEY][-1] = v[NRLKEY][-1].format(sr=100)
 
     # get sensitivities
-    digi_sens = {k: NRL.get_datalogger_response(v[NRLKEY]).instrument_sensitivity.value for k, v in DIGITIZERS.items() if v[NRLKEY]}
+    digi_sens = {k: NRL.get_datalogger_response(v[NRLKEY]).instrument_sensitivity.value for k, v in digitizers.items() if v[NRLKEY]}
     seism_sens = {k: NRL.get_sensor_response(v[NRLKEY]).instrument_sensitivity.value for k, v in SEISMOMETERS.items() if v[NRLKEY]}
     expr = ('Expression for digiitizer tab:\n=SWITCH(A2, {}, "")\n\n'
             'Expression for seismometer tab:\n=SWITCH(A2, {}, "")\n\n')

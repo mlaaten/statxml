@@ -2,6 +2,7 @@
 """
 Changes
 dev
+  * if station coordinates or elevation is changeing write entry at station level
   * specify different config file with `-c conf_SX.json` and other new cli arguments
   * set default config file name to conf.json
   * support using offline NRL (faster) by setting NRL config parameter
@@ -311,6 +312,7 @@ def csv2xml(only_public=False):
         sta_startdate = None
         sta_coords = None
         channels = []
+        sens, chresponse, enddate = None, None, None
         for epoch in tsn[sta]:
             fc = 0
             if only_public and epoch['public'] != 'TRUE':
@@ -321,7 +323,6 @@ def csv2xml(only_public=False):
             srs = _setdefault(epoch, 'sampling rates', DEFAULT_SRS)
             srs = srs.replace(' ', '').split(',')
             startdate = UTC(epoch['UTC_starttime'])
-            enddate = UTC(epoch['UTC_endtime']) if epoch['UTC_endtime'] != '' else None
             _setdefault(epoch, 'seismometer id')
             if sta_startdate is None:
                 sta_startdate = startdate
@@ -339,9 +340,31 @@ def csv2xml(only_public=False):
                 continue
             if sta_coords is None:
                 sta_coords = (lat, lon, elev)
-            elif sta_coords != 'invalid' and sta_coords != (lat, lon, elev):
-                sta_coords = 'invalid'
-                print(f'{sta_code} is moving! Coordinates at station level will reflect latest epoch.')
+            elif sta_coords != (lat, lon, elev):
+                lat2, lon2, elev2 = sta_coords
+                sta_coords = (lat, lon, elev)
+                print(f'{sta_code} is moving! Create new entry on station level.')
+                assert len(channels) > 0
+                ### here is some code which is duplicated below -- not ideal
+                name = epoch['name']
+                fargs = (sta_code.upper(), lat2, lon2, elev2, name, 1e9 / sens)
+                shm_loc.append(SHM_LOC.format(*fargs))
+                fargs = (sta_code, name, lat2, lon2, elev2,
+                         sens, 1e9 / sens,
+                         fc, chresponse.get_paz().normalization_factor,
+                         chresponse.get_paz().zeros, chresponse.get_paz().poles)
+                info.append(INFO.format(*fargs))
+                stations.append(Station(code=sta_code, latitude=lat2, longitude=lon2,
+                              elevation=elev2, creation_date=sta_startdate,
+                              restricted_status='open',
+                              site=Site(name=CONF.get('STA_NAME', '{}').format(name),
+                                        country='Germany'),
+                              channels=channels,
+                              start_date=sta_startdate, end_date=enddate))
+                ### end duplicated code
+                channels = []
+                sta_startdate = startdate
+            enddate = UTC(epoch['UTC_endtime']) if epoch['UTC_endtime'] != '' else None
             data_logger = Equipment(manufacturer=digi[NRLKEY][0] if digi[NRLKEY] else None,
                                     description=epoch['digitizer'],
                                     model=epoch['digitizer'].split('_')[0])
